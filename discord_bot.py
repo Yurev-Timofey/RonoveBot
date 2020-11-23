@@ -7,11 +7,6 @@ import youtube_dl
 
 client = commands.Bot(command_prefix='.')
 token = open('discord_token.txt', 'r').read()
-prev_msg_id = 0
-path = "pipe.fifo"
-if os.path.exists(path):
-    os.remove(path)
-
 
 ytdl_format_options = {
     'format': 'bestaudio/best',
@@ -24,7 +19,7 @@ ytdl_format_options = {
     'quiet': True,
     'no_warnings': True,
     'default_search': 'auto',
-    'source_address': '0.0.0.0' # bind to ipv4 since ipv6 addresses cause issues sometimes
+    'source_address': '0.0.0.0'  # bind to ipv4 since ipv6 addresses cause issues sometimes
 }
 ffmpeg_options = {
     'options': '-vn'
@@ -126,30 +121,38 @@ class Music(commands.Cog):
             ctx.voice_client.stop()
 
 
+class Telegram(commands.Cog):
+    def __init__(self, client):
+        self.client = client
+        Telegram.check_telegram_message.start(self)
+
+    prev_msg_id = 0
+    path = "pipe.fifo"
+    if os.path.exists(path):
+        os.remove(path)
+
+    @tasks.loop(seconds=0.5)
+    async def check_telegram_message(self):
+        if not os.path.exists(self.path):
+            return
+
+        pipe = os.open(self.path, os.O_RDONLY | os.O_NONBLOCK)
+        message = os.read(pipe, 2000).decode('utf-8')
+        os.close(pipe)
+
+        if message != '':
+            msg_id, msg_text, channel_id = message.split('$space$')
+            if msg_id != self.prev_msg_id:
+                self.prev_msg_id = msg_id
+                print("Отправлено \"{}\" в канал \"{}\"".format(msg_text, channel_id))
+                await client.get_channel(int(channel_id)).send(msg_text)
+
+
 @client.event
 async def on_ready():
     print('Logged in discord as {0.user}'.format(client))
-    check_telegram_message.start()
-
-
-@tasks.loop(seconds=0.5)
-async def check_telegram_message():
-    global prev_msg_id
-
-    if not os.path.exists(path):
-        return
-
-    pipe = os.open(path, os.O_RDONLY | os.O_NONBLOCK)
-    message = os.read(pipe, 2000).decode('utf-8')
-    os.close(pipe)
-
-    if message != '':
-        msg_id, msg_text, channel_id = message.split('$space$')
-        if msg_id != prev_msg_id:
-            prev_msg_id = msg_id
-            print("Отправлено \"{}\" в канал \"{}\"".format(msg_text, channel_id))
-            await client.get_channel(int(channel_id)).send(msg_text)
 
 
 client.add_cog(Music(client))
+client.add_cog(Telegram(client))
 client.run(token)
