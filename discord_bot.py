@@ -124,7 +124,7 @@ class Music(commands.Cog):
 class Telegram(commands.Cog):
     def __init__(self, client):
         self.client = client
-        self.check_message.start(self)
+        Telegram.check_message.start(self)
 
     prev_msg_id = 0
     path = "to_discord.fifo"
@@ -167,13 +167,15 @@ class ChatAI(commands.Cog):
         pipe = os.open(self.path, os.O_RDONLY | os.O_NONBLOCK)
         message = os.read(pipe, 2000).decode('utf-8')
         os.close(pipe)
-
-        if message != '':
+        if message:
             msg_id, msg_text = message.split('$space$')
             if msg_id != self.prev_msg_id:
-                self.prev_msg_id = msg_id
-                print("Отправлено \"{}\" в канал \"{}\"".format(msg_text, channel_id))
-                await client.get_channel(channel_id).send(msg_text)
+                if msg_text:
+                    self.prev_msg_id = msg_id
+                    print("Отправлено \"{}\" в канал \"{}\"".format(msg_text, channel_id))
+                    await client.get_channel(channel_id).send(msg_text)
+                else:
+                    await client.get_channel(channel_id).send("Я не знаю как ответить.......")
 
     @staticmethod
     @client.event
