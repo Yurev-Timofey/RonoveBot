@@ -124,15 +124,15 @@ class Music(commands.Cog):
 class Telegram(commands.Cog):
     def __init__(self, client):
         self.client = client
-        Telegram.check_telegram_message.start(self)
+        self.check_message.start(self)
 
     prev_msg_id = 0
-    path = "pipe.fifo"
+    path = "to_discord.fifo"
     if os.path.exists(path):
         os.remove(path)
 
     @tasks.loop(seconds=0.5)
-    async def check_telegram_message(self):
+    async def check_message(self):
         if not os.path.exists(self.path):
             return
 
@@ -148,11 +148,59 @@ class Telegram(commands.Cog):
                 await client.get_channel(int(channel_id)).send(msg_text)
 
 
+class ChatAI(commands.Cog):
+    def __init__(self, client):
+        self.client = client
+        ChatAI.check_message.start(self)
+
+    prev_msg_id = 0
+    path = "to_discord.fifo"
+    if os.path.exists(path):
+        os.remove(path)
+
+    @tasks.loop(seconds=0.5)
+    async def check_message(self):
+        if not os.path.exists(self.path):
+            return
+
+        channel_id = 777276267837915186
+        pipe = os.open(self.path, os.O_RDONLY | os.O_NONBLOCK)
+        message = os.read(pipe, 2000).decode('utf-8')
+        os.close(pipe)
+
+        if message != '':
+            msg_id, msg_text = message.split('$space$')
+            if msg_id != self.prev_msg_id:
+                self.prev_msg_id = msg_id
+                print("Отправлено \"{}\" в канал \"{}\"".format(msg_text, channel_id))
+                await client.get_channel(channel_id).send(msg_text)
+
+    @staticmethod
+    @client.event
+    async def on_message(message):
+        if message.author == client.user:
+            return
+        # elif message.channel ==
+
+        path = "from_discord.fifo"
+        if not os.path.exists(path):
+            os.mkfifo(path)
+
+        pipe = open(path, "w")
+        pipe.write(message.content)
+        pipe.close()
+
+
 @client.event
 async def on_ready():
     print('Logged in discord as {0.user}'.format(client))
 
 
+print("Включить режим нейросети?(Телеграм бот не будет работать) \ny/n: ")
+if input() == 'y':
+    client.add_cog(ChatAI(client))
+else:
+    client.add_cog(Telegram(client))
+
 client.add_cog(Music(client))
-client.add_cog(Telegram(client))
 client.run(token)

@@ -52,7 +52,7 @@ def callback_inline(call):
 @bot.message_handler(content_types=['text'])
 def send_to_discord(message):
     try:
-        path = "pipe.fifo"
+        path = "to_discord.fifo"
         if not os.path.exists(path):
             os.mkfifo(path)
 
