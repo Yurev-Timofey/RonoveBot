@@ -4,6 +4,13 @@ import asyncio
 import discord
 from discord.ext import tasks, commands
 import youtube_dl
+import logging
+
+logger = logging.getLogger('discord')
+logger.setLevel(logging.DEBUG)
+handler = logging.FileHandler(filename='discord.log', encoding='utf-8', mode='w')
+handler.setFormatter(logging.Formatter('%(asctime)s:%(levelname)s:%(name)s: %(message)s'))
+logger.addHandler(handler)
 
 client = commands.Bot(command_prefix='.')
 token = open('discord_token.txt', 'r').read()
@@ -180,9 +187,9 @@ class ChatAI(commands.Cog):
     @staticmethod
     @client.event
     async def on_message(message):
-        if message.author == client.user:
+        if message.author == client.user or message.content.startswith('.'):
+            await client.process_commands(message)
             return
-        # elif message.channel ==
 
         path = "from_discord.fifo"
         if not os.path.exists(path):
@@ -193,16 +200,63 @@ class ChatAI(commands.Cog):
         pipe.close()
 
 
+class CatOrDog(commands.Cog):
+    def __init__(self, client):
+        self.client = client
+
+    @commands.command()
+    async def catordog(self, ctx):
+        if len(ctx.message.attachments) == 0:
+            await ctx.send("Сначала прикрепите изображение")
+            return
+
+        attachment = ctx.message.attachments[0]
+
+        byte_img = await attachment.read()
+        prediction = self.recognition(byte_img)
+        prediction = str(prediction).replace('[', '').replace(']', '')
+        prediction = float(prediction) * 100
+        if prediction > 50:
+            await ctx.send("Я уверен на {0:.1f}%, что это собакен".format(prediction))
+        else:
+            await ctx.send("Я уверен на {0:.1f}%, что это котшка".format(100 - prediction))
+
+    @staticmethod
+    def recognition(img_bytes):
+        from keras.models import load_model
+        from keras.preprocessing import image
+        import numpy as np
+        from PIL import Image
+        import io
+
+        model = load_model('new_model.h5')
+
+        img = Image.open(io.BytesIO(img_bytes))
+        img = img.convert('RGB')
+        target_size = (150, 150)
+        img = img.resize(target_size)
+
+        img_tensor = image.img_to_array(img)
+        img_tensor = np.expand_dims(img_tensor, axis=0)
+        img_tensor /= 255.
+
+        prediction = model.predict(img_tensor)
+        return prediction
+
+
 @client.event
 async def on_ready():
     print('Logged in discord as {0.user}'.format(client))
 
 
-print("Включить режим нейросети?(Телеграм бот не будет работать) \ny/n: ")
+print("Включить режим общения с нейросетью?(Телеграм бот не будет работать) \ny/n: ")
 if input() == 'y':
+    print("Бот работает в режиме общения с нейросетью")
     client.add_cog(ChatAI(client))
 else:
+    print("Бот работает в режиме отправки сообщений из telegram")
     client.add_cog(Telegram(client))
 
 client.add_cog(Music(client))
+client.add_cog(CatOrDog(client))
 client.run(token)
